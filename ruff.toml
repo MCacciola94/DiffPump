@@ -1,0 +1,94 @@
+line-length = 79
+target-version = "py311"
+
+[lint]
+select = ["ALL"]
+
+ignore = [
+    # - Modules -
+    "ANN", # flake8-annotations
+    "B905", # flake8-bugbear: zip-without-explicit-strict
+    "COM", # flake8-commas
+    "C90", # mccabe complexity
+    "DJ",  # django
+    "EXE", # flake8-executable
+    "T10", # debugger
+    "TID", # flake8-tidy-imports
+
+    # - Specific rules -
+    "D100",   # ignore missing docs
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "E402",     # false positives for local imports
+    "ERA001",   # ignore commented code
+    "FIX002",   # too verbose descriptions of todos
+    "FBT001",   # boolean in optional arguments
+    "FBT002",   # boolean in optional arguments
+    "FBT003",   # boolean in optional arguments
+    "INP001",   # ignore __init__ per module
+    "ISC001",
+    "N80",      # ignore naming conventions
+    "PLR2004",  # arbitrary numbers in comparisons
+    "S301",     # security issue with pickle
+    "T201",     # ignore print statements
+    "TD002",
+    "TD003",
+    "TRY003",   # external messages in exceptions are too verbose
+    "UP007",    # ignore Union typying
+]
+
+# Rules to ignore for tests
+per-file-ignores."tests/*" = [
+    "B",
+    "NPY",
+    "S",
+    "SLF",
+    "PT",
+]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Pylint configuration
+[lint.pylint]
+max-args = 10
+
+[format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"

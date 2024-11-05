@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "DiffPump"
+version = "1.0"
+description = "A differentiable feasibility pump"
+authors = [
+    "Matteo Cacciola <matteo.cacciola@polymtl.ca>",
+    "Alexandre Forel <alexandre.forel@polymtl.ca>",
+    ]
+readme = "README.md"
+license = "MIT"
+keywords = [
+    "Integer Programming",
+    "Operation Research",
+    "Differentiable Optimization"
+    ]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Operation Research",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    ]
+
+homepage = "https://github.com/MCacciola94/DiffPump"
+
+[tool.poetry.dependencies]
+python = ">= 3.9, < 3.12"
+numpy = "1.26.3"
+pandas = "2.1.4"
+scipy = ">= 1.12.0"
+gurobipy = ">= 11.0.0"
+pytest = "7.4"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
