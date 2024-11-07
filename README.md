@@ -1,7 +1,7 @@
 # The Differentiable Feasibility Pump
 ![Tests badge](https://github.com/MCacciola94/DiffPump/actions/workflows/main.yml/badge.svg?branch=main)
 
-This repository provides method to run the differentiable feasibility pump algorithm. It is based on the paper *The Differentiable Feasibility Pump* by Matteo Cacciola, Alexandre Forel, Andrea Lodi, and Antonio Frangioni. The paper is [available here](https://arxiv.org/).
+This repository provides method to run the differentiable feasibility pump algorithm. It is based on the paper *The Differentiable Feasibility Pump* by Matteo Cacciola, Alexandre Forel, Andrea Lodi, and Antonio Frangioni. The paper is [available here](https://arxiv.org/abs/2411.03535).
 
 ## Getting Started
 
