@@ -31,7 +31,13 @@ class MIPSparseModel(optGrbModel):
             tuple: optimization model and variables
 
         """
-        self.MPS = read_mps(self.path)
+        # The custom read_mps parser is only used by the dense model; the sparse
+        # path takes constraints from Gurobi's model.getA(). Some MPS bound
+        # formats trip read_mps (IndexError), so keep it non-fatal here.
+        try:
+            self.MPS = read_mps(self.path)
+        except Exception:
+            self.MPS = None
 
         # ceate a model
         m = gp.Model("GurobiMIPModel", env=self.env)
