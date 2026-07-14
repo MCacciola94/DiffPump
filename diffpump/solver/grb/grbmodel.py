@@ -59,6 +59,13 @@ class optGrbModel(Solver):
         self.model.update()
         self.model.optimize()
         self.model.setParam("TimeLimit", 1e100)
+        # First solve is cold (Method=-1 auto); every later solve only changes
+        # the objective (constraints fixed), so switch to primal simplex, which
+        # warm-starts from the previous basis. Single-threaded throughout — the
+        # experiments run hundreds of jobs in parallel, one thread each.
+        if not getattr(self, "_warm_started", False):
+            self.model.Params.Method = 0
+            self._warm_started = True
         return [self.x[k].x for k in self.x], self.model.objVal
 
     def copy(self):

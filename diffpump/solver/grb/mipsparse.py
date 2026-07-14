@@ -49,8 +49,9 @@ class MIPSparseModel(optGrbModel):
         ]
 
         m = m.relax()
-        # Setting LP solver to deterministic method
-        m.Params.Method = 4
+        # Method=-1 (auto) for the first cold solve; grbmodel.solve() switches to
+        # primal simplex for the warm-started subsequent solves. Single-threaded.
+        m.Params.Method = -1
         m.setParam(GRB.Param.Threads, 1)
         m.setParam(GRB.Param.OptimalityTol, 1e-9)
         m.setParam(GRB.Param.FeasibilityTol, 1e-9)
