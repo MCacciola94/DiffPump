@@ -28,8 +28,9 @@ def first_iteration(
     """
     tick = time()
 
-    # Save initial costs
-    model.init_cost = np.array(model.model.obj)
+    # Save initial costs (only the original x variables; the eq.(13) auxiliary
+    # d-variables are appended after them and carry no cost).
+    model.init_cost = np.array(model.model.obj)[: model.num_cost]
 
     # Solve first iteration of feasibility pump with initial cost vector
     sol, _ = model.solve()

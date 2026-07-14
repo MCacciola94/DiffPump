@@ -65,8 +65,9 @@ def diff_pump(solver, config):
     # Feasible region of the relaxed MILP is of the form Ax<=b
     A, b = solver.get_constr()
 
-    # Convert numpy arrays to tensors
-    init_cost = torch.DoubleTensor(solver.model.obj)
+    # Convert numpy arrays to tensors (only the original x variables; the
+    # eq.(13) auxiliary d-variables are appended after them and carry no cost).
+    init_cost = torch.DoubleTensor(list(solver.model.obj)[: solver.num_cost])
 
     # - Load loss functions and modules -
     # Load modules
@@ -122,6 +123,10 @@ def diff_pump(solver, config):
     for num_iters in range(config.iter):
         # Normalize cost vector
         theta_aux = normalization(theta)
+
+        # eq.(13): the pumping problem for general integers is the weighted L1
+        # distance to the current rounded solution y; refresh y before solving.
+        solver.set_pump_target(history["x_round"][-1])
 
         # Solve linear relaxation of original problem for cost_vector
         x_lp = jac_estimator(theta_aux)

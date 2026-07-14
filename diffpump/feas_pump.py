@@ -46,6 +46,10 @@ def feas_pump(solver, max_iter, history_length=2):
         # Update cost vector by projecting using Hamming distance
         hamm = hamming_update(x_round_prev, binary_mask)
 
+        # eq.(13): refresh the general-integer distance target before solving
+        # (no-op when there are no general integers).
+        solver.set_pump_target(x_round_prev)
+
         # Solve linear relaxation for new cost vector
         x_lp = solve(solver, cost_vector=hamm)
 
