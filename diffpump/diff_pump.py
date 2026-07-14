@@ -115,6 +115,8 @@ def diff_pump(solver, config):
 
     # Get mask for non binary vars
     binary_mask = get_binary_mask(len(theta), binary_idxs)
+    # Tensor version, used to keep the pumping cost of continuous variables at 0.
+    binary_mask_t = torch.DoubleTensor(binary_mask)
 
     # If true, will heuristically detect cycles and perturb theta
     use_restarts = not config.no_restarts
@@ -187,6 +189,13 @@ def diff_pump(solver, config):
         # Gradient descent step on generalized loss
         optimizer.zero_grad()
         totalLoss.backward()
+
+        # First approach (Section 4.2): update only the integer-variable cost
+        # coefficients. Otherwise the feasibility loss drifts theta onto the
+        # continuous variables, and theta^T x on a continuous variable that is
+        # unbounded makes the pumping LP unbounded.
+        with torch.no_grad():
+            theta.grad.mul_(binary_mask_t)
 
         # Update theta
         optimizer.step()
