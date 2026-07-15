@@ -62,8 +62,12 @@ class FeasibilitySparseLoss(BaseFeasibility):
         norm_const[norm_const < 1e-16] = 1
         A = (A.T / norm_const).T
         b = b / norm_const
+        # Use COO row/col/data together: A.nonzero() drops explicitly-stored
+        # zeros while A.data keeps them, which would give mismatched index/value
+        # counts (torch: "indices and values must have same nnz").
+        A = A.tocoo()
         A = torch.sparse_coo_tensor(
-            indices=np.array(A.nonzero()), values=A.data, size=A.shape
+            indices=np.vstack([A.row, A.col]), values=A.data, size=A.shape
         ).to(torch.float64)
         b = torch.DoubleTensor(b)
         return A, b

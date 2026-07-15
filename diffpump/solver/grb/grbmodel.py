@@ -66,6 +66,13 @@ class optGrbModel(Solver):
         if not getattr(self, "_warm_started", False):
             self.model.Params.Method = 0
             self._warm_started = True
+        if self.model.SolCount == 0:
+            # No solution: an unbounded/infeasible LP relaxation (e.g. an original
+            # objective unbounded over unbounded continuous variables) leaves the
+            # feasibility pump with no starting point / iterate. Fail cleanly
+            # instead of crashing on the missing .x attribute.
+            msg = f"LP solve produced no solution (Gurobi status {self.model.Status})"
+            raise RuntimeError(msg)
         return [self.x[k].x for k in self.x], self.model.objVal
 
     def copy(self):
