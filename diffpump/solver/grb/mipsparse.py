@@ -139,6 +139,12 @@ class MIPSparseModel(optGrbModel):
         A2 = A[(sense == ">")]
         b2 = b[(sense == ">")]
 
+        # Drop vacuous constraints (a.x <= +inf / a.x >= -inf, e.g. degenerate
+        # ranged rows): they are always satisfied, but their infinite row norm
+        # turns the normalised feasibility system into nan.
+        A1, b1 = A1[b1 < np.inf], b1[b1 < np.inf]
+        A2, b2 = A2[b2 > -np.inf], b2[b2 > -np.inf]
+
         A = sp.vstack([A1, -A2])
         b = np.concatenate((b1, -b2))
 

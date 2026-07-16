@@ -92,6 +92,10 @@ class MIPModel(optGrbModel):
                 continue
             if constr["type"] == "G":
                 multplr = -1
+            # Skip vacuous constraints (a.x <= +inf): always satisfied, and
+            # their infinite norm poisons the feasibility-loss normalisation.
+            if multplr * self.MPS.rhs[self.rhs_name][name] == np.inf:
+                continue
             for var, coeff in constr["coefficients"].items():
                 idx = self.var_to_idx[var]
                 aux[idx] = coeff * multplr
@@ -134,6 +138,10 @@ class MIPModel(optGrbModel):
             if constr["type"] == "G":
                 mltplr = -1
 
+            # Skip vacuous inequality rows (a.x <= +inf), as in get_ineq_constr.
+            if (constr["type"] != "E"
+                    and mltplr * self.MPS.rhs[self.rhs_name][name] == np.inf):
+                continue
             for var, coeff in constr["coefficients"].items():
                 idx = self.var_to_idx[var]
                 aux[idx] = coeff * mltplr
