@@ -29,17 +29,19 @@ class Minx1mx(torch.autograd.Function):
         if binary_idxs != []:
             vec = vec[binary_idxs]
 
-        # Compute min(x, 1-x) for each component,
-        # elevate at p and sum over all components
-        minvec1mvec = np.minimum(vec, 1 - vec)
-        if int(p) != p:
-            minvec1mvec[minvec1mvec < 0] = 0
+        # eq.(8): distance to the nearest integer, min(frac, 1-frac) with
+        # frac = x - floor(x). For binary x in [0,1] this is exactly min(x,1-x),
+        # so binary/mixed-binary behaviour is unchanged; general integers now get
+        # their true non-integrality instead of the meaningless min(x,1-x)<0.
+        frac = vec - np.floor(vec)
+        minvec1mvec = np.minimum(frac, 1 - frac)   # in [0, 0.5], never negative
 
         loss = (minvec1mvec**p).sum()
 
         # Save for backward pass
         ctx.p = p
         ctx.minvec1mvec = minvec1mvec
+        ctx.frac = frac
         ctx.vec = vec
         ctx.binary_idxs = binary_idxs
         ctx.n = n
@@ -77,16 +79,21 @@ class Minx1mx(torch.autograd.Function):
         """
         p = ctx.p
         minvec1mvec = ctx.minvec1mvec
+        frac = ctx.frac
         vec = ctx.vec
         binary_idxs = ctx.binary_idxs
         n = ctx.n
 
-        # Compute the indexes that needs to change sign.
-        # Notice that, in the following line, "vec < 0.5" will produce
-        # negative gradient for the entries that are equal to 0.5.
-        # This  corresponds to rounding up those components when computing
-        # the rounded solution. Rounding down is achieved by "vec <= 0.5".
-        sign_multipliers = 2 * (vec <= 0.5) - 1
+        # Sign of the subgradient of the distance-to-nearest-integer, in terms
+        # of the fractional part: descending toward the nearest integer means
+        # pushing down when frac <= 0.5 (round down) and up otherwise. For binary
+        # x in [0,1), frac = x, so this reduces to the original "vec <= 0.5".
+        sign_multipliers = 2 * (frac <= 0.5) - 1
+        # At exact integer points frac==0 the subgradient is ambiguous; use the
+        # original raw-value convention there so binary/MBP behaviour (where a
+        # variable sits exactly at 0 or 1) stays byte-identical to the old code.
+        at_int = frac == 0
+        sign_multipliers[at_int] = 2 * (vec[at_int] <= 0.5) - 1
         # Fix negative entries due to numerical erros
         minvec1mvec[minvec1mvec < 0] = 0
 
