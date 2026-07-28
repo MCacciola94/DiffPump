@@ -44,6 +44,12 @@ def load_parser():
                         help="Weight of cost loss.")
     parser.add_argument("--feas_loss", type=float, default=0.0,
                         help="Weight of feasibility loss.")
+    parser.add_argument("--argmin_feas", action="store_true",
+                        help="Use the eq.(21) argmin feasibility loss (DP5): "
+                             "re-optimize continuous vars to the best feasible "
+                             "completion instead of the ReLU-sum feasibility loss.")
+    parser.add_argument("--q", type=int, default=2,
+                        help="Exponent of the argmin feasibility loss (DP5 uses q=2).")
     parser.add_argument("--reg_loss", type=float, default=1.0,
                         help="Weight of regularization loss.")
     # Experiment configuration

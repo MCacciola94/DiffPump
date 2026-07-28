@@ -10,6 +10,7 @@ import torch
 from .first_iteration import first_iteration
 from .losses import (
     CostLoss,
+    FeasibilityArgminLoss,
     FeasibilityLoss,
     FeasibilitySparseLoss,
     IntegralityLoss,
@@ -77,7 +78,17 @@ def diff_pump(solver, config):
     integrality_loss = IntegralityLoss(
         config.integ_metric, p=config.p, binary_idxs=binary_idxs
     )
-    if config.denselinalg:
+    # eq.(21) argmin feasibility loss (DP5): evaluated on the integer slice only,
+    # re-optimizing the continuous variables to the best feasible completion.
+    use_argmin_feas = getattr(config, "argmin_feas", False)
+    if use_argmin_feas:
+        cont_idxs = [i for i in range(solver.num_cost)
+                     if i not in set(binary_idxs)]
+        feasibility_loss = FeasibilityArgminLoss(
+            A=A, b=b, int_idx=binary_idxs, cont_idx=cont_idxs,
+            q=getattr(config, "q", 2),
+        )
+    elif config.denselinalg:
         feasibility_loss = FeasibilityLoss(A=A, b=b)
     else:
         feasibility_loss = FeasibilitySparseLoss(A=A, b=b)
@@ -139,7 +150,12 @@ def diff_pump(solver, config):
         # Measure losses
         initcostLoss = init_cost_loss(x_round)
         integralityLoss = integrality_loss(x_lp)
-        feasibilityLoss = feasibility_loss(x_round)
+        # eq.(21) takes only the integer slice (continuous vars are re-optimized
+        # inside); the ReLU-sum losses take the full rounded vector.
+        if use_argmin_feas:
+            feasibilityLoss = feasibility_loss(x_round[binary_idxs])
+        else:
+            feasibilityLoss = feasibility_loss(x_round)
 
         regularizationLoss = reg_loss(theta)
         # Measure integrality metric

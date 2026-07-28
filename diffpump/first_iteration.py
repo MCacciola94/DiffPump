@@ -49,7 +49,12 @@ def first_iteration(
     initcost_torch = torch.DoubleTensor(model.init_cost)
     initcostLossVal = init_cost_loss(x_round_torch).item()
     integralityLossVal = integrality_loss(sol_torch).item()
-    feasibilityLossVal = feasibility_loss(x_round_torch).item()
+    # eq.(21) argmin loss takes only the integer slice; the ReLU-sum losses take
+    # the full rounded vector.
+    if hasattr(feasibility_loss, "A_int"):
+        feasibilityLossVal = feasibility_loss(x_round_torch[binary_idxs]).item()
+    else:
+        feasibilityLossVal = feasibility_loss(x_round_torch).item()
 
     regularizationLossVal = reg_loss(initcost_torch).item()
 
