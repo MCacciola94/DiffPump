@@ -15,12 +15,13 @@ from .grbmodel import optGrbModel
 class MIPSparseModel(optGrbModel):
     def __init__(self, path):
         self.path = path
-        super().__init__()
-        self.A = self.model.getA()
-        self.b = self.model.getAttr("RHS")
-        self.b = np.array(self.b)
-        self.sense = self.model.getAttr("sense")
-        self.sense = np.array(self.sense)
+        # eq.(13) auxiliary structures (general-integer distance linearisation).
+        # Initialised before super().__init__() because _get_model() fills them.
+        self._d_vars = {}   # var index -> auxiliary d variable
+        self._d_pos = {}    # var index -> constraint  x_i - d_i <= y_i
+        self._d_neg = {}    # var index -> constraint -x_i - d_i <= -y_i
+        self.general_int_idxs = []
+        super().__init__()  # calls _get_model(), which sets A/b/sense + d-vars
 
     def _get_model(self):
         """
@@ -30,22 +31,33 @@ class MIPSparseModel(optGrbModel):
             tuple: optimization model and variables
 
         """
-        self.MPS = read_mps(self.path)
+        # The custom read_mps parser is only used by the dense model; the sparse
+        # path takes constraints from Gurobi's model.getA(). Some MPS bound
+        # formats trip read_mps (IndexError), so keep it non-fatal here.
+        try:
+            self.MPS = read_mps(self.path)
+        except Exception:
+            self.MPS = None
 
         # ceate a model
         m = gp.Model("GurobiMIPModel", env=self.env)
         m = gp.read(str(self.path))
         self.original_model = m
-        # varibles
-        x = m.getVars()
-        x = dict(enumerate(x))
-        binary_vars_names = [
-            var.VarName for i, var in x.items() if var.vtype != "C"
+        # varibles (original, before relaxation)
+        orig_vars = m.getVars()
+        binary_vars_names = [v.VarName for v in orig_vars if v.vtype != "C"]
+        # General-integer variables = non-continuous whose domain is NOT {0,1}.
+        # For these the plain theta^T x pumping objective is not the distance and
+        # can be unbounded; we linearise the eq.(13) distance with d-variables.
+        gen_int_names = [
+            v.VarName for v in orig_vars
+            if v.vtype != "C" and not (v.LB == 0.0 and v.UB == 1.0)
         ]
 
         m = m.relax()
-        # Setting LP solver to deterministic method
-        m.Params.Method = 4
+        # Method=-1 (auto) for the first cold solve; grbmodel.solve() switches to
+        # primal simplex for the warm-started subsequent solves. Single-threaded.
+        m.Params.Method = -1
         m.setParam(GRB.Param.Threads, 1)
         m.setParam(GRB.Param.OptimalityTol, 1e-9)
         m.setParam(GRB.Param.FeasibilityTol, 1e-9)
@@ -57,10 +69,53 @@ class MIPSparseModel(optGrbModel):
         self.binary_vars = [
             self.var_to_idx[name] for name in binary_vars_names
         ]
+        self.general_int_idxs = [self.var_to_idx[name] for name in gen_int_names]
         if len(binary_vars_names) != len(x.keys()):
             print("The model has both binary and continuous variables.")
 
+        # Capture the ORIGINAL constraint matrix BEFORE adding the d-rows, so the
+        # feasibility loss (get_constr) uses only the real constraints.
+        m.update()
+        self.A = m.getA()
+        self.b = np.array(m.getAttr("RHS"))
+        self.sense = np.array(m.getAttr("sense"))
+
+        # eq.(13) linearisation for general integers:
+        #   min ... + sum_i |theta_i| d_i   s.t.  d_i >= x_i - y_i,  d_i >= y_i - x_i
+        # The RHS (y_i) is refreshed each iteration by set_pump_target().
+        for idx in self.general_int_idxs:
+            xi = x[idx]
+            di = m.addVar(lb=0.0, ub=GRB.INFINITY, name=f"d_{idx}")
+            self._d_vars[idx] = di
+            self._d_pos[idx] = m.addConstr(xi - di <= 0.0, name=f"dpos_{idx}")
+            self._d_neg[idx] = m.addConstr(-xi - di <= 0.0, name=f"dneg_{idx}")
+        m.update()
+
         return m, x
+
+    def set_pump_target(self, y):
+        """Refresh the RHS of the eq.(13) linking constraints to the current
+        rounded solution y (call before each pumping solve). No-op for pure
+        binary/mixed-binary instances (no general integers)."""
+        for idx, cpos in self._d_pos.items():
+            yi = float(y[idx])
+            cpos.RHS = yi
+            self._d_neg[idx].RHS = -yi
+
+    def setObj(self, c):
+        """Build the pumping objective (eq. 13):
+            sum_{binary/cont. i} theta_i x_i  +  sum_{gen-integer i} |theta_i| d_i.
+        Binary variables keep the linear theta^T x form; general integers use the
+        bounded weighted L1 distance via the auxiliary d-variables."""
+        if len(c) != self.num_cost:
+            msg = "Size of cost vector cannot match vars."
+            raise ValueError(msg)
+        gen = self._d_vars
+        terms = [float(c[k]) * xi for k, xi in self.x.items()
+                 if k not in gen and float(c[k]) != 0.0]
+        terms += [abs(float(c[idx])) * di for idx, di in gen.items()
+                  if float(c[idx]) != 0.0]
+        self.model.setObjective(gp.quicksum(terms))
 
     def get_binary_vars(self):
         return self.binary_vars
@@ -83,6 +138,12 @@ class MIPSparseModel(optGrbModel):
         b1 = b[(sense == "<")]
         A2 = A[(sense == ">")]
         b2 = b[(sense == ">")]
+
+        # Drop vacuous constraints (a.x <= +inf / a.x >= -inf, e.g. degenerate
+        # ranged rows): they are always satisfied, but their infinite row norm
+        # turns the normalised feasibility system into nan.
+        A1, b1 = A1[b1 < np.inf], b1[b1 < np.inf]
+        A2, b2 = A2[b2 > -np.inf], b2[b2 > -np.inf]
 
         A = sp.vstack([A1, -A2])
         b = np.concatenate((b1, -b2))

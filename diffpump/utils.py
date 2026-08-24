@@ -94,6 +94,11 @@ def get_optimizer(theta, optimizer, lr, mom):
 
 def integ_metric(vec, *, binary_idxs):
     vec = vec[binary_idxs]
-    # Compute min(x, 1-x) for each component,
-    minvec1mvec = np.minimum(vec, 1 - vec)
+    # Distance to the nearest integer, min(frac, 1-frac) with frac = x-floor(x).
+    # For binary x in [0,1] this equals min(x,1-x); for general integers it is
+    # their true non-integrality (the old min(x,1-x) went negative for x>1, so
+    # the metric was blind to whether general integers were integral, and could
+    # declare success with fractional general integers).
+    frac = vec - np.floor(vec)
+    minvec1mvec = np.minimum(frac, 1 - frac)
     return np.max(minvec1mvec)

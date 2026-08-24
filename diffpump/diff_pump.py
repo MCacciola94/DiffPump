@@ -10,6 +10,7 @@ import torch
 from .first_iteration import first_iteration
 from .losses import (
     CostLoss,
+    FeasibilityArgminLoss,
     FeasibilityLoss,
     FeasibilitySparseLoss,
     IntegralityLoss,
@@ -65,8 +66,9 @@ def diff_pump(solver, config):
     # Feasible region of the relaxed MILP is of the form Ax<=b
     A, b = solver.get_constr()
 
-    # Convert numpy arrays to tensors
-    init_cost = torch.DoubleTensor(solver.model.obj)
+    # Convert numpy arrays to tensors (only the original x variables; the
+    # eq.(13) auxiliary d-variables are appended after them and carry no cost).
+    init_cost = torch.DoubleTensor(list(solver.model.obj)[: solver.num_cost])
 
     # - Load loss functions and modules -
     # Load modules
@@ -76,7 +78,17 @@ def diff_pump(solver, config):
     integrality_loss = IntegralityLoss(
         config.integ_metric, p=config.p, binary_idxs=binary_idxs
     )
-    if config.denselinalg:
+    # eq.(21) argmin feasibility loss (DP5): evaluated on the integer slice only,
+    # re-optimizing the continuous variables to the best feasible completion.
+    use_argmin_feas = getattr(config, "argmin_feas", False)
+    if use_argmin_feas:
+        cont_idxs = [i for i in range(solver.num_cost)
+                     if i not in set(binary_idxs)]
+        feasibility_loss = FeasibilityArgminLoss(
+            A=A, b=b, int_idx=binary_idxs, cont_idx=cont_idxs,
+            q=getattr(config, "q", 2),
+        )
+    elif config.denselinalg:
         feasibility_loss = FeasibilityLoss(A=A, b=b)
     else:
         feasibility_loss = FeasibilitySparseLoss(A=A, b=b)
@@ -114,6 +126,8 @@ def diff_pump(solver, config):
 
     # Get mask for non binary vars
     binary_mask = get_binary_mask(len(theta), binary_idxs)
+    # Tensor version, used to keep the pumping cost of continuous variables at 0.
+    binary_mask_t = torch.DoubleTensor(binary_mask)
 
     # If true, will heuristically detect cycles and perturb theta
     use_restarts = not config.no_restarts
@@ -122,6 +136,10 @@ def diff_pump(solver, config):
     for num_iters in range(config.iter):
         # Normalize cost vector
         theta_aux = normalization(theta)
+
+        # eq.(13): the pumping problem for general integers is the weighted L1
+        # distance to the current rounded solution y; refresh y before solving.
+        solver.set_pump_target(history["x_round"][-1])
 
         # Solve linear relaxation of original problem for cost_vector
         x_lp = jac_estimator(theta_aux)
@@ -132,7 +150,12 @@ def diff_pump(solver, config):
         # Measure losses
         initcostLoss = init_cost_loss(x_round)
         integralityLoss = integrality_loss(x_lp)
-        feasibilityLoss = feasibility_loss(x_round)
+        # eq.(21) takes only the integer slice (continuous vars are re-optimized
+        # inside); the ReLU-sum losses take the full rounded vector.
+        if use_argmin_feas:
+            feasibilityLoss = feasibility_loss(x_round[binary_idxs])
+        else:
+            feasibilityLoss = feasibility_loss(x_round)
 
         regularizationLoss = reg_loss(theta)
         # Measure integrality metric
@@ -182,6 +205,13 @@ def diff_pump(solver, config):
         # Gradient descent step on generalized loss
         optimizer.zero_grad()
         totalLoss.backward()
+
+        # First approach (Section 4.2): update only the integer-variable cost
+        # coefficients. Otherwise the feasibility loss drifts theta onto the
+        # continuous variables, and theta^T x on a continuous variable that is
+        # unbounded makes the pumping LP unbounded.
+        with torch.no_grad():
+            theta.grad.mul_(binary_mask_t)
 
         # Update theta
         optimizer.step()
